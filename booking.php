@@ -11,99 +11,112 @@ $user_id = $_SESSION['user_id'];
 $error = "";
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $nama       = htmlspecialchars($_POST['nama']);
-    $no_hp      = htmlspecialchars($_POST['no_hp']);
-    $checkin    = $_POST['checkin'];
-    $checkout   = $_POST['checkout'];
-    $tamu       = (int) $_POST['tamu'];
-    $kamar      = (int) $_POST['kamar'];
-    $tipe       = $_POST['tipe'];
-    
-    $metode = $_POST['pembayaran'];
-if ($metode === 'transfer' || $metode === 'ewallet') {
-    $pembayaran = isset($_POST['pembayaran_detail']) ? $_POST['pembayaran_detail'] : ucfirst($metode);
-} elseif ($metode === 'cash') {
-    $pembayaran = 'Cash';
-} else {
-    $pembayaran = 'Tidak diketahui';
-}
+    $nama     = htmlspecialchars($_POST['nama']);
+    $no_hp    = htmlspecialchars($_POST['no_hp']);
+    $checkin  = trim($_POST['checkin'] ?? '');
+    $checkout = trim($_POST['checkout'] ?? '');
+    $tamu     = (int) ($_POST['tamu'] ?? 1);
+    $kamar    = (int) ($_POST['kamar'] ?? 1);
+    $tipe     = $_POST['tipe'] ?? 'standard';
 
-    $start = new DateTime($checkin);
-    $end = new DateTime($checkout);
-    $lama_inap = $start->diff($end)->days;
-    if ($lama_inap <= 0) $lama_inap = 1;
+    // ✅ FIX 1: Validasi tanggal sebelum dipakai
+    if (empty($checkin) || empty($checkout)) {
+        $error = "Tanggal check-in dan check-out harus diisi.";
+    } elseif (!strtotime($checkin) || !strtotime($checkout)) {
+        $error = "Format tanggal tidak valid.";
+    } else {
+        $metode = $_POST['pembayaran'] ?? '';
 
-    switch (strtolower($tipe)) {
-        case 'standard': $harga_per_malam = 500000; break;
-        case 'deluxe':   $harga_per_malam = 750000; break;
-        case 'suite':    $harga_per_malam = 1200000; break;
-        default:         $harga_per_malam = 400000; break;
-    }
+        // ✅ FIX 2: Ambil detail pembayaran sesuai metode yang dipilih
+        if ($metode === 'transfer') {
+            $pembayaran = $_POST['bank_detail'] ?? 'Transfer Bank';
+        } elseif ($metode === 'ewallet') {
+            $pembayaran = $_POST['ewallet_detail'] ?? 'E-Wallet';
+        } elseif ($metode === 'cash') {
+            $pembayaran = 'Cash';
+        } else {
+            $pembayaran = 'Tidak diketahui';
+        }
 
-    $total_harga = $lama_inap * $kamar * $harga_per_malam;
+        $start     = new DateTime($checkin);
+        $end       = new DateTime($checkout);
+        $lama_inap = $start->diff($end)->days;
+        if ($lama_inap <= 0) $lama_inap = 1;
 
-    // Proses semua metode pembayaran
-    if (isset($_FILES['bukti']) && $_FILES['bukti']['error'] == 0) {
-        $upload_dir = 'uploads/';
-        $nama_file = $_FILES['bukti']['name'];
-        $tmp_file  = $_FILES['bukti']['tmp_name'];
-        $path_file = $upload_dir . time() . '_' . basename($nama_file);
+        switch (strtolower($tipe)) {
+            case 'standard': $harga_per_malam = 500000;  break;
+            case 'deluxe':   $harga_per_malam = 750000;  break;
+            case 'suite':    $harga_per_malam = 1200000; break;
+            default:         $harga_per_malam = 400000;  break;
+        }
 
-        if (move_uploaded_file($tmp_file, $path_file)) {
-            $status = 'aktif';
-            $query = "INSERT INTO pemesanan2 
-                (user_id, nama_lengkap, no_hp, checkin, checkout, tamu, kamar, tipe_kamar, metode_pembayaran, total_harga, bukti_pembayaran, status)
+        $total_harga = $lama_inap * $kamar * $harga_per_malam;
+
+        if (isset($_FILES['bukti']) && $_FILES['bukti']['error'] == 0) {
+            $upload_dir = 'uploads/';
+            $nama_file  = $_FILES['bukti']['name'];
+            $tmp_file   = $_FILES['bukti']['tmp_name'];
+            $path_file  = $upload_dir . time() . '_' . basename($nama_file);
+
+            if (move_uploaded_file($tmp_file, $path_file)) {
+                $status = 'aktif';
+                $query = "INSERT INTO pemesanan 
+                    (user_id, nama_lengkap, no_hp, checkin, checkout, tamu, kamar, tipe_kamar, metode_pembayaran, total_harga, bukti_pembayaran, status)
+                    VALUES 
+                    ('$user_id', '$nama', '$no_hp', '$checkin', '$checkout', '$tamu', '$kamar', '$tipe', '$pembayaran', '$total_harga', '$path_file', '$status')";
+
+                if (mysqli_query($conn, $query)) {
+                    header("Location: profil.php?pesan=berhasil");
+                    exit;
+                } else {
+                    $error = "Gagal menyimpan data: " . mysqli_error($conn);
+                }
+            } else {
+                $error = "Gagal mengunggah bukti pembayaran.";
+            }
+        } else {
+            $status = 'pending';
+            $query = "INSERT INTO pemesanan 
+                (user_id, nama_lengkap, no_hp, checkin, checkout, tamu, kamar, tipe_kamar, metode_pembayaran, total_harga, status)
                 VALUES 
-                ('$user_id', '$nama', '$no_hp', '$checkin', '$checkout', '$tamu', '$kamar', '$tipe', '$pembayaran', '$total_harga', '$path_file', '$status')";
+                ('$user_id', '$nama', '$no_hp', '$checkin', '$checkout', '$tamu', '$kamar', '$tipe', '$pembayaran', '$total_harga', '$status')";
 
             if (mysqli_query($conn, $query)) {
-                header("Location: profil.php?pesan=berhasil");
+                $id_pemesanan = mysqli_insert_id($conn);
+                header("Location: struk.php?id=$id_pemesanan");
                 exit;
             } else {
                 $error = "Gagal menyimpan data: " . mysqli_error($conn);
             }
-        } else {
-            $error = "Gagal mengunggah bukti pembayaran.";
-        }
-    } else {
-        $status = 'pending';
-        $query = "INSERT INTO pemesanan2 
-            (user_id, nama_lengkap, no_hp, checkin, checkout, tamu, kamar, tipe_kamar, metode_pembayaran, total_harga, status)
-            VALUES 
-            ('$user_id', '$nama', '$no_hp', '$checkin', '$checkout', '$tamu', '$kamar', '$tipe', '$pembayaran', '$total_harga', '$status')";
-
-        if (mysqli_query($conn, $query)) {
-            $id_pemesanan = mysqli_insert_id($conn);
-            header("Location: struk.php?id=$id_pemesanan");
-            exit;
-        } else {
-            $error = "Gagal menyimpan data: " . mysqli_error($conn);
         }
     }
 } else {
-    $checkin  = $_GET['checkin'] ?? '';
+    $checkin  = $_GET['checkin']  ?? '';
     $checkout = $_GET['checkout'] ?? '';
-    $tamu     = (int) ($_GET['tamu'] ?? 1);
-    $kamar    = (int) ($_GET['kamar'] ?? 1);
-    $tipe     = $_GET['tipe'] ?? 'standard';
+    $tamu     = (int) ($_GET['tamu']   ?? 1);
+    $kamar    = (int) ($_GET['kamar']  ?? 1);
+    $tipe     = $_GET['tipe']     ?? 'standard';
 
-    $start = new DateTime($checkin);
-    $end = new DateTime($checkout);
-    $lama_inap = $start->diff($end)->days;
-    if ($lama_inap <= 0) $lama_inap = 1;
+    // ✅ FIX 3: Validasi tanggal di GET juga sebelum new DateTime
+    if (!empty($checkin) && !empty($checkout) && strtotime($checkin) && strtotime($checkout)) {
+        $start     = new DateTime($checkin);
+        $end       = new DateTime($checkout);
+        $lama_inap = $start->diff($end)->days;
+        if ($lama_inap <= 0) $lama_inap = 1;
+    } else {
+        $lama_inap = 1;
+    }
 
     switch (strtolower($tipe)) {
-        case 'standard': $harga_per_malam = 500000; break;
-        case 'deluxe':   $harga_per_malam = 750000; break;
+        case 'standard': $harga_per_malam = 500000;  break;
+        case 'deluxe':   $harga_per_malam = 750000;  break;
         case 'suite':    $harga_per_malam = 1200000; break;
-        default:         $harga_per_malam = 400000; break;
+        default:         $harga_per_malam = 400000;  break;
     }
 
     $total_harga = $lama_inap * $kamar * $harga_per_malam;
 }
 ?>
-
-
 
 <!DOCTYPE html>
 <html lang="id">
@@ -113,10 +126,7 @@ if ($metode === 'transfer' || $metode === 'ewallet') {
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Playfair+Display&display=swap');
 
-    /* Reset */
-    *, *::before, *::after {
-      box-sizing: border-box;
-    }
+    *, *::before, *::after { box-sizing: border-box; }
 
     body {
       font-family: 'Playfair Display', serif;
@@ -136,16 +146,12 @@ if ($metode === 'transfer' || $metode === 'ewallet') {
       width: 100%;
       padding: 3.2rem 3.6rem;
       border-radius: 20px;
-      box-shadow:
-        0 0 15px rgba(212, 175, 55, 0.7),
-        inset 0 0 20px rgba(212, 175, 55, 0.15);
+      box-shadow: 0 0 15px rgba(212, 175, 55, 0.7), inset 0 0 20px rgba(212, 175, 55, 0.15);
       border: 2.5px solid #d4af37;
       transition: box-shadow 0.4s ease;
     }
     .form-container:hover {
-      box-shadow:
-        0 0 25px rgba(255, 215, 0, 0.95),
-        inset 0 0 30px rgba(255, 215, 0, 0.3);
+      box-shadow: 0 0 25px rgba(255, 215, 0, 0.95), inset 0 0 30px rgba(255, 215, 0, 0.3);
     }
 
     h2 {
@@ -155,9 +161,7 @@ if ($metode === 'transfer' || $metode === 'ewallet') {
       margin-bottom: 2.8rem;
       color: #f5c518;
       letter-spacing: 0.15em;
-      text-shadow:
-        0 0 10px #f5c518,
-        0 0 25px #d4af37;
+      text-shadow: 0 0 10px #f5c518, 0 0 25px #d4af37;
       user-select: none;
     }
 
@@ -184,13 +188,9 @@ if ($metode === 'transfer' || $metode === 'ewallet') {
       font-family: 'Playfair Display', serif;
       box-shadow: inset 0 0 15px rgba(212, 175, 55, 0.5);
       transition: all 0.3s ease;
-      user-select: text;
     }
 
-    input::placeholder {
-      color: #d4af37aa;
-      font-style: italic;
-    }
+    input::placeholder { color: #d4af37aa; font-style: italic; }
 
     input:focus, select:focus {
       outline: none;
@@ -214,10 +214,7 @@ if ($metode === 'transfer' || $metode === 'ewallet') {
       user-select: none;
       line-height: 1.6;
     }
-
-    .ringkasan p {
-      margin: 0.35rem 0;
-    }
+    .ringkasan p { margin: 0.35rem 0; }
 
     button {
       margin-top: 3rem;
@@ -230,29 +227,24 @@ if ($metode === 'transfer' || $metode === 'ewallet') {
       border: none;
       border-radius: 20px;
       cursor: pointer;
-      box-shadow:
-        0 6px 16px rgba(212, 175, 55, 0.85),
-        inset 0 -3px 8px #b8860b;
+      box-shadow: 0 6px 16px rgba(212, 175, 55, 0.85), inset 0 -3px 8px #b8860b;
       transition: background-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
       text-transform: uppercase;
       letter-spacing: 0.14em;
       font-family: 'Playfair Display', serif;
       user-select: none;
     }
-
     button:hover {
       background-color: #f5c518;
       color: #1b1b1b;
-      box-shadow:
-        0 8px 24px rgba(245, 197, 24, 1),
-        inset 0 -3px 10px #f5c518;
+      box-shadow: 0 8px 24px rgba(245, 197, 24, 1), inset 0 -3px 10px #f5c518;
     }
 
     .error {
       background-color: #7f1a1a;
       padding: 1.2rem 1.8rem;
       border-radius: 18px;
-      margin-top: 1.8rem;
+      margin-bottom: 1.5rem;
       text-align: center;
       font-weight: 700;
       color: #ffbebe;
@@ -286,17 +278,9 @@ if ($metode === 'transfer' || $metode === 'ewallet') {
       text-shadow: 0 0 4px #b8860b;
       user-select: none;
     }
+    .payment-info p { margin: 0.45rem 0; font-weight: 600; }
 
-    .payment-info p {
-      margin: 0.45rem 0;
-      font-weight: 600;
-    }
-
-    #qr-container {
-      margin-top: 1.4rem;
-      text-align: center;
-    }
-
+    #qr-container { margin-top: 1.4rem; text-align: center; }
     #qr-image {
       max-width: 160px;
       border-radius: 16px;
@@ -318,6 +302,7 @@ if ($metode === 'transfer' || $metode === 'ewallet') {
       user-select: none;
       transition: color 0.3s ease;
     }
+    a:hover { color: #f5c518; text-decoration: underline; }
 
     .custom-file-label {
       display: inline-block;
@@ -332,64 +317,42 @@ if ($metode === 'transfer' || $metode === 'ewallet') {
       text-align: center;
       user-select: none;
     }
+    .custom-file-label:hover { background-color: #f5c518; }
 
-    .custom-file-label:hover {
-      background-color: #f5c518;
-    }
-
-
-    a:hover {
-      color: #f5c518;
-      text-decoration: underline;
-    }
-
-    /* Responsive */
     @media (max-width: 640px) {
-      .form-container {
-        padding: 2.2rem 2.8rem;
-      }
-
-      h2 {
-        font-size: 2.4rem;
-      }
-
-      input, select {
-        font-size: 1rem;
-      }
-
-      button {
-        font-size: 1.15rem;
-      }
+      .form-container { padding: 2.2rem 2.8rem; }
+      h2 { font-size: 2.4rem; }
+      input, select { font-size: 1rem; }
+      button { font-size: 1.15rem; }
     }
   </style>
 </head>
 <body>
   <main class="form-container" role="main" aria-labelledby="form-title">
     <h2 id="form-title">
-  <a href="profil.php" style="all: unset; cursor: pointer; display: inline-block;">
-    Konfirmasi Pemesanan
-  </a>
-</h2>
+      <a href="profil.php" style="all: unset; cursor: pointer; display: inline-block;">
+        Konfirmasi Pemesanan
+      </a>
+    </h2>
 
+    <?php if (!empty($error)) echo "<div class='error' role='alert'>" . htmlspecialchars($error) . "</div>"; ?>
 
-    <?php if (isset($error)) echo "<div class='error' role='alert'>$error</div>"; ?>
-  
-<form method="POST" enctype="multipart/form-data">
-  <div class="summary">
-      <p><strong>Check-in:</strong> <?= htmlspecialchars($checkin) ?></p>
-      <p><strong>Check-out:</strong> <?= htmlspecialchars($checkout) ?></p>
-      <p><strong>Jumlah Tamu:</strong> <?= $tamu ?></p>
-      <p><strong>Jumlah Kamar:</strong> <?= $kamar ?></p>
-      <p><strong>Tipe Kamar:</strong> <?= ucfirst($tipe) ?></p>
-      <p><strong>Lama Inap:</strong> <?= $lama_inap ?> malam</p>
-      <p><strong>Total Harga:</strong> Rp <?= number_format($total_harga, 0, ',', '.') ?></p>
-    </div>
+    <form method="POST" enctype="multipart/form-data">
+      <div class="ringkasan">
+        <p><strong>Check-in:</strong> <?= htmlspecialchars($checkin) ?></p>
+        <p><strong>Check-out:</strong> <?= htmlspecialchars($checkout) ?></p>
+        <p><strong>Jumlah Tamu:</strong> <?= $tamu ?></p>
+        <p><strong>Jumlah Kamar:</strong> <?= $kamar ?></p>
+        <p><strong>Tipe Kamar:</strong> <?= ucfirst(htmlspecialchars($tipe)) ?></p>
+        <p><strong>Lama Inap:</strong> <?= $lama_inap ?> malam</p>
+        <p><strong>Total Harga:</strong> Rp <?= number_format($total_harga, 0, ',', '.') ?></p>
+      </div>
 
-    <input type="hidden" name="checkin" value="<?= htmlspecialchars($checkin) ?>">
-    <input type="hidden" name="checkout" value="<?= htmlspecialchars($checkout) ?>">
-    <input type="hidden" name="tamu" value="<?= $tamu ?>">
-    <input type="hidden" name="kamar" value="<?= $kamar ?>">
-    <input type="hidden" name="tipe" value="<?= htmlspecialchars($tipe) ?>">
+      <input type="hidden" name="checkin"  value="<?= htmlspecialchars($checkin) ?>">
+      <input type="hidden" name="checkout" value="<?= htmlspecialchars($checkout) ?>">
+      <input type="hidden" name="tamu"     value="<?= $tamu ?>">
+      <input type="hidden" name="kamar"    value="<?= $kamar ?>">
+      <input type="hidden" name="tipe"     value="<?= htmlspecialchars($tipe) ?>">
 
       <label for="nama">Nama Lengkap</label>
       <input type="text" id="nama" name="nama" required autocomplete="name" placeholder="Masukkan nama lengkap Anda" />
@@ -438,79 +401,37 @@ if ($metode === 'transfer' || $metode === 'ewallet') {
 
       <!-- Cash -->
       <div id="sub-cash" class="sub-payment" aria-hidden="true">
-        <div class="payment-info" aria-label="Informasi Pembayaran Bayar di Tempat">
+        <div class="payment-info" aria-label="Informasi Pembayaran di Tempat">
           <p><strong>Pembayaran dilakukan saat check-in di lokasi.</strong></p>
         </div>
       </div>
 
+      <!-- Notifikasi batas waktu -->
       <div id="notifikasi-batas-waktu" style="display:none; margin-top: 1.5rem; padding: 1.2rem; background-color: #3d2c00; color: #ffdd57; border-radius: 14px; box-shadow: inset 0 0 12px #f5c518; font-weight: bold; text-align: center; text-shadow: 0 0 4px #b8860b;">
-  Anda belum mengunggah bukti pembayaran.<br>
-  Pemesanan Anda tetap diproses dan diberi waktu <strong>2 jam</strong>.<br>
-  Jika dalam 2 jam tidak dibayar, pemesanan akan dibatalkan otomatis.<br>
-  <div style="margin-top: 1rem;">
-    <button type="button" id="btn-ok" style="padding: 0.6rem 1.4rem; margin: 0.3rem; font-weight: bold; border-radius: 8px; border: none; background-color: #d4af37; color: #121212; cursor: pointer;">OK</button>
-    <button type="button" id="btn-cancel" style="padding: 0.6rem 1.4rem; margin: 0.3rem; font-weight: bold; border-radius: 8px; border: none; background-color: #7f1a1a; color: #fff0f0; cursor: pointer;">Cancel</button>
-  </div>
-</div>
+        Anda belum mengunggah bukti pembayaran.<br>
+        Pemesanan Anda tetap diproses dan diberi waktu <strong>2 jam</strong>.<br>
+        Jika dalam 2 jam tidak dibayar, pemesanan akan dibatalkan otomatis.<br>
+        <div style="margin-top: 1rem;">
+          <button type="button" id="btn-ok"     style="padding: 0.6rem 1.4rem; margin: 0.3rem; font-weight: bold; border-radius: 8px; border: none; background-color: #d4af37; color: #121212; cursor: pointer;">OK</button>
+          <button type="button" id="btn-cancel" style="padding: 0.6rem 1.4rem; margin: 0.3rem; font-weight: bold; border-radius: 8px; border: none; background-color: #7f1a1a; color: #fff0f0; cursor: pointer;">Cancel</button>
+        </div>
+      </div>
 
-<script>
-const form = document.querySelector("form");
-let formShouldSubmit = false;
-
-function showNotifikasiBatasWaktu() {
-  document.getElementById('notifikasi-batas-waktu').style.display = 'block';
-}
-
-function hideNotifikasiBatasWaktu() {
-  document.getElementById('notifikasi-batas-waktu').style.display = 'none';
-}
-
-function lanjutkanPemesanan() {
-  formShouldSubmit = true;
-  hideNotifikasiBatasWaktu();
-  form.submit();
-}
-
-function batalkanPemesanan() {
-  hideNotifikasiBatasWaktu();
-}
-
-// Tambahkan event listener setelah elemen dimuat
-window.addEventListener('DOMContentLoaded', () => {
-  document.getElementById("btn-ok").addEventListener("click", lanjutkanPemesanan);
-  document.getElementById("btn-cancel").addEventListener("click", batalkanPemesanan);
-});
-
-// Tampilkan notifikasi hanya saat submit
-form.addEventListener("submit", function(e) {
-  const metode = document.getElementById("pembayaran").value;
-  const bukti = document.getElementById("bukti");
-
-  if (!formShouldSubmit && (metode === 'transfer' || metode === 'ewallet') && bukti.files.length === 0) {
-    e.preventDefault();
-    showNotifikasiBatasWaktu();
-  }
-});
-</script>
-
-
-      <!-- <label>Bukti Pembayaran (JPG/PNG/PDF):</label>
-    <input type="file" name="bukti" accept=".jpg,.jpeg,.png,.pdf" required><br> -->
-      <div id="bukti-pembayaran-group">
+      <!-- Upload bukti -->
+      <div id="bukti-pembayaran-group" style="margin-top: 1.6rem; display: none;">
         <label for="bukti">Bukti Pembayaran (JPG/PNG/PDF):</label><br>
         <label for="bukti" class="custom-file-label">Pilih File</label>
         <input type="file" name="bukti" accept=".jpg,.jpeg,.png,.pdf" id="bukti" style="display: none;">
         <span id="nama-file" style="display: block; margin-top: 0.5rem; font-size: 0.9rem; color: #f5deb3;"></span>
       </div>
 
-
-
       <button type="submit" aria-label="Konfirmasi Pesanan">Konfirmasi Pesanan</button>
       <a href="index.php">Kembali ke Beranda</a>
-</form>
-  </div>
+    </form>
+  </main>
 
   <script>
+    // Custom file input label
     document.querySelector('.custom-file-label').addEventListener('click', function () {
       document.getElementById('bukti').click();
     });
@@ -518,40 +439,43 @@ form.addEventListener("submit", function(e) {
     document.getElementById('bukti').addEventListener('change', function () {
       const fileName = this.files[0] ? this.files[0].name : "";
       document.getElementById('nama-file').textContent = fileName;
+
+      // Sembunyikan notifikasi kalau file sudah dipilih
+      const metode = document.getElementById("pembayaran").value;
+      if ((metode === 'transfer' || metode === 'ewallet') && this.files.length > 0) {
+        document.getElementById("notifikasi-batas-waktu").style.display = 'none';
+      }
     });
 
     function tampilkanSubPembayaran() {
-      const metode = document.getElementById('pembayaran').value;
-      const transferDiv = document.getElementById('sub-transfer');
-      const ewalletDiv = document.getElementById('sub-ewallet');
-      const cashDiv = document.getElementById('sub-cash');
+      const metode   = document.getElementById('pembayaran').value;
+      const transfer = document.getElementById('sub-transfer');
+      const ewallet  = document.getElementById('sub-ewallet');
+      const cash     = document.getElementById('sub-cash');
       const buktiGroup = document.getElementById('bukti-pembayaran-group');
       const buktiInput = document.getElementById('bukti');
+      const notif    = document.getElementById("notifikasi-batas-waktu");
 
-      // Sembunyikan semua sub-pembayaran terlebih dahulu
-      transferDiv.style.display = 'none';
-      transferDiv.setAttribute('aria-hidden', 'true');
-      ewalletDiv.style.display = 'none';
-      ewalletDiv.setAttribute('aria-hidden', 'true');
-      cashDiv.style.display = 'none';
-      cashDiv.setAttribute('aria-hidden', 'true');
+      // Sembunyikan semua dulu
+      [transfer, ewallet, cash].forEach(el => {
+        el.style.display = 'none';
+        el.setAttribute('aria-hidden', 'true');
+      });
+      notif.style.display = 'none';
 
-      // Tampilkan div yang sesuai dengan metode
-      if (metode === 'transfer'){
-        transferDiv.style.display = 'block';
-        transferDiv.setAttribute('aria-hidden', 'false');
-        buktiGroup.style.display = 'block';
-        buktiInput.required = false; // ← JANGAN true
-
-      } else if (metode === 'ewallet') {
-        ewalletDiv.style.display = 'block';
-        ewalletDiv.setAttribute('aria-hidden', 'false');
+      if (metode === 'transfer') {
+        transfer.style.display = 'block';
+        transfer.setAttribute('aria-hidden', 'false');
         buktiGroup.style.display = 'block';
         buktiInput.required = false;
-
+      } else if (metode === 'ewallet') {
+        ewallet.style.display = 'block';
+        ewallet.setAttribute('aria-hidden', 'false');
+        buktiGroup.style.display = 'block';
+        buktiInput.required = false;
       } else if (metode === 'cash') {
-        cashDiv.style.display = 'block';
-        cashDiv.setAttribute('aria-hidden', 'false');
+        cash.style.display = 'block';
+        cash.setAttribute('aria-hidden', 'false');
         buktiGroup.style.display = 'none';
         buktiInput.required = false;
       } else {
@@ -561,59 +485,37 @@ form.addEventListener("submit", function(e) {
     }
 
     function tampilkanQRCode(value) {
-      const qrImg = document.getElementById("qr-image");
-      if (value.includes("OVO")) {
-        qrImg.src = "barcode.jpg";
-      } else if (value.includes("DANA")) {
-        qrImg.src = "barcode.jpg";
-      } else if (value.includes("GoPay")) {
-        qrImg.src = "barcode.jpg";
-      } else {
-        qrImg.src = "barcode.jpg";
-      }
+      document.getElementById("qr-image").src = "barcode.jpg";
     }
+
+    // ✅ FIX 4: Script notifikasi hanya satu, tidak duplikat
+    const form = document.querySelector("form");
+    let formShouldSubmit = false;
+
+    function showNotifikasi() { document.getElementById('notifikasi-batas-waktu').style.display = 'block'; }
+    function hideNotifikasi() { document.getElementById('notifikasi-batas-waktu').style.display = 'none'; }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById("btn-ok").addEventListener("click", function () {
+        formShouldSubmit = true;
+        hideNotifikasi();
+        form.submit();
+      });
+      document.getElementById("btn-cancel").addEventListener("click", function () {
+        formShouldSubmit = false;
+        hideNotifikasi();
+      });
+    });
+
+    form.addEventListener("submit", function (e) {
+      const metode = document.getElementById("pembayaran").value;
+      const bukti  = document.getElementById("bukti");
+
+      if (!formShouldSubmit && (metode === 'transfer' || metode === 'ewallet') && bukti.files.length === 0) {
+        e.preventDefault();
+        showNotifikasi();
+      }
+    });
   </script>
-
-  <script>
-document.getElementById("pembayaran").addEventListener("change", function () {
-  const metode = this.value;
-  const bukti = document.getElementById("bukti");
-  const notif = document.getElementById("notifikasi-batas-waktu");
-
-  if ((metode === 'transfer' || metode === 'ewallet') && bukti.files.length === 0) {
-    notif.style.display = 'block';
-  } else {
-    notif.style.display = 'none';
-  }
-});
-
-<script>
-document.getElementById("pembayaran").addEventListener("change", function () {
-  const metode = this.value;
-  const bukti = document.getElementById("bukti");
-  const notif = document.getElementById("notifikasi-batas-waktu");
-
-  if ((metode === 'transfer' || metode === 'ewallet') && bukti.files.length === 0) {
-    notif.style.display = 'block';
-  } else {
-    notif.style.display = 'none';
-  }
-});
-
-document.getElementById("bukti").addEventListener("change", function () {
-  const metode = document.getElementById("pembayaran").value;
-  const notif = document.getElementById("notifikasi-batas-waktu");
-
-  if ((metode === 'transfer' || metode === 'ewallet') && this.files.length === 0) {
-    notif.style.display = 'block';
-  } else {
-    notif.style.display = 'none';
-  }
-});
-</script>
-
-
-  
-
 </body>
 </html>
