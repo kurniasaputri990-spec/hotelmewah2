@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             if (move_uploaded_file($tmp_file, $path_file)) {
                 $status = 'aktif';
-                $query = "INSERT INTO pemesanan 
+                $query = "INSERT INTO pemesanan2 
                     (user_id, nama_lengkap, no_hp, checkin, checkout, tamu, kamar, tipe_kamar, metode_pembayaran, total_harga, bukti_pembayaran, status)
                     VALUES 
                     ('$user_id', '$nama', '$no_hp', '$checkin', '$checkout', '$tamu', '$kamar', '$tipe', '$pembayaran', '$total_harga', '$path_file', '$status')";
@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         } else {
             $status = 'pending';
-            $query = "INSERT INTO pemesanan 
+            $query = "INSERT INTO pemesanan2 
                 (user_id, nama_lengkap, no_hp, checkin, checkout, tamu, kamar, tipe_kamar, metode_pembayaran, total_harga, status)
                 VALUES 
                 ('$user_id', '$nama', '$no_hp', '$checkin', '$checkout', '$tamu', '$kamar', '$tipe', '$pembayaran', '$total_harga', '$status')";
