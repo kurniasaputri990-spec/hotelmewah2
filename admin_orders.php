@@ -57,7 +57,7 @@ if (isset($_GET['cancel_id'])) {
 // Hapus otomatis pemesanan pending lebih dari 1 jam
 $now = date('Y-m-d H:i:s');
 mysqli_query($conn, "
-    DELETE FROM pemesanan 
+    DELETE FROM pemesanan2 
     WHERE status = 'pending' 
       AND metode_pembayaran NOT LIKE '%cash%' 
       AND TIMESTAMPDIFF(MINUTE, created_at, '$now') > 60
