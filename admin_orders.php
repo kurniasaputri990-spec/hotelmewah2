@@ -133,7 +133,7 @@ $query = mysqli_query($conn, "SELECT * FROM pemesanan2 ORDER BY id DESC");
 
         // Harga berdasarkan tipe kamar
         switch (strtolower($row['tipe_kamar'])) {
-            case 'standar': $harga_per_malam = 300000; break;
+            case 'standard': $harga_per_malam = 300000; break;
             case 'deluxe':  $harga_per_malam = 500000; break;
             case 'suite':   $harga_per_malam = 800000; break;
             default:        $harga_per_malam = 0;
