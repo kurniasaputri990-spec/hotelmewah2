@@ -64,7 +64,7 @@ mysqli_query($conn, "
 ");
 
 // Ambil semua data pemesanan
-$query = mysqli_query($conn, "SELECT * FROM pemesanan ORDER BY id DESC");
+$query = mysqli_query($conn, "SELECT * FROM pemesanan2 ORDER BY id DESC");
 ?>
 
 <!DOCTYPE html>
