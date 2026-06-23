@@ -182,9 +182,6 @@ width:80%;
 
 <div class="user-info">
 
-Nama :
-<?= htmlspecialchars($user['nama_lengkap'] ?? '') ?>
-
 <br><br>
 
 Username :
