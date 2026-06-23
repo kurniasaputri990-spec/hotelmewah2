@@ -9,7 +9,7 @@ if (!isset($_SESSION['username']) || $_SESSION['username'] != 'admin') {
 }
 
 // Ambil data semua user dari tabel 'users'
-$query = mysqli_query($conn, "SELECT id, username, email, created_at FROM users ORDER BY id ASC");
+$query = mysqli_query($conn, "SELECT id, username, email, created_at FROM users2 ORDER BY id ASC");
 ?>
 <!DOCTYPE html>
 <html>
