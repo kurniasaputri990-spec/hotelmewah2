@@ -15,7 +15,7 @@ if (isset($_POST['update_status_id'])) {
 
     $id = intval($_POST['update_status_id']);
 
-    $sql = "UPDATE pemesanan
+    $sql = "UPDATE pemesanan2
             SET status = 'aktif'
             WHERE id = ?";
 
@@ -42,7 +42,7 @@ if (isset($_POST['update_status_id'])) {
 // Batalkan pemesanan
 if (isset($_GET['cancel_id'])) {
     $cancel_id = intval($_GET['cancel_id']);
-    $query_cancel = mysqli_query($conn, "DELETE FROM pemesanan WHERE id = $cancel_id");
+    $query_cancel = mysqli_query($conn, "DELETE FROM pemesanan2 WHERE id = $cancel_id");
 
     if ($query_cancel) {
         $_SESSION['pesan'] = "Pemesanan ID $cancel_id berhasil dihapus.";
